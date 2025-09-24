@@ -171,9 +171,19 @@ The inverted index search is a critical component that efficiently finds relevan
 ## Performance Optimizations
 
 1. **Caching**:
+- API-level LRU caching (1000 most recent queries)
 - Embedding model cached globally
-- Fuzzy search results cached (up to 1000 queries)
+- Fuzzy search results cached
 - Database connection pooling (2-10 connections)
+
+**API Cache Details**:
+- Thread-safe implementation for concurrent requests
+- Cache key combines query text and result count
+- Automatic cleanup of oldest entries when limit reached
+- Monitoring endpoints:
+  - GET /cache/stats - View current cache size and limits
+  - POST /cache/clear - Manually clear cache if needed
+- Logging for cache hits/misses
 
 2. **Text Processing**:
 - MTG-specific stop words

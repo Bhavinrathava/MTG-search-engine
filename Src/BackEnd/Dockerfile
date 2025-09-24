@@ -11,12 +11,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
-COPY Search/requirements.txt .
+COPY Search/requirements.txt API/requirements.txt ./
 
 # Install dependencies in a virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -r API/requirements.txt
 
 # Final stage
 FROM python:3.9-slim

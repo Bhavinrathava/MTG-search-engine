@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from BackEnd.Search.query_processing import QueryProcessing
 from bson import ObjectId
+from .cache import SearchCache
 import json
 import logging
 
@@ -17,6 +18,9 @@ class JSONEncoder(json.JSONEncoder):
 app = Flask(__name__)
 CORS(app)
 app.json_encoder = JSONEncoder
+
+# Initialize cache with max size of 1000 queries
+search_cache = SearchCache(max_size=1000)
 
 @app.route('/search', methods=['POST'])
 def search():
@@ -42,7 +46,14 @@ def search():
         
         logger.info("Processing search request for query: %s", query)
         
-        # Initialize query processor
+        # Check cache first
+        cache_key = f"{query}:{k}"
+        cached_results = search_cache.get(cache_key)
+        if cached_results is not None:
+            logger.info("Cache hit for query: %s", query)
+            return jsonify(cached_results)
+        
+        # Cache miss - Initialize query processor
         processor = QueryProcessing(query)
         
         # Get results
@@ -67,11 +78,17 @@ def search():
         serializable_results = json.loads(json.dumps(filtered_results, cls=JSONEncoder))
         
         logger.info("Search completed successfully with %d results", len(results))
-        return jsonify({
+        response = {
             'cards': serializable_results,
             'count': len(serializable_results),
             'status': 'success'
-        })
+        }
+        
+        # Cache the results
+        search_cache.put(cache_key, response)
+        logger.info("Cached results for query: %s", query)
+        
+        return jsonify(response)
         
     except Exception as e:
         logger.error("Error processing search request: %s", str(e), exc_info=True)
@@ -87,6 +104,23 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'MTG Card Search API'
+    })
+
+@app.route('/cache/stats', methods=['GET'])
+def cache_stats():
+    """Get cache statistics"""
+    return jsonify({
+        'size': search_cache.get_size(),
+        'max_size': search_cache.max_size
+    })
+
+@app.route('/cache/clear', methods=['POST'])
+def clear_cache():
+    """Clear the cache"""
+    search_cache.clear()
+    return jsonify({
+        'status': 'success',
+        'message': 'Cache cleared'
     })
 
 if __name__ == '__main__':
