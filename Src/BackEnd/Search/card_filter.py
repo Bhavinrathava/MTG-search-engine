@@ -15,93 +15,45 @@ class CardFilter:
     
     def inverted_search(self, expanded_text: str) -> List[str]:
         """
-        Enhanced inverted search with field weighting and importance scoring
+        Simple inverted search that returns cards matching any search word
         
         Args:
             expanded_text: The expanded query text to search with
             
         Returns:
-            List of card UUIDs sorted by relevance
+            List of card UUIDs that match any search word
         """
         logger.info("Starting inverted search with expanded text: %s", expanded_text)
-        start_time = time.time()
         
         db = self.db_connection.get_connection()
-        if db is None:  # Changed from 'if not db' to 'if db is None'
+        if db is None:
             logger.error("Could not connect to database")
             return []
             
         index_collection = db['InvertedIndex']
         
         # Extract words from expanded text
-        word_start = time.time()
         words = self.text_processor.extract_words(expanded_text)
-        word_time = time.time() - word_start
-        logger.info("Word extraction completed in %.3fs - Found %d words", word_time, len(words))
+        logger.info("Found %d words in search text", len(words))
         
-        # Store word scores and their associated card IDs
-        word_scores = {}
-        card_scores = {}
-        logger.debug("Processing words and calculating scores...")
-        
-        # Process words and calculate scores
-        scoring_start = time.time()
+        # Get all card IDs that match any word
+        matching_cards = set()
         for word in words:
             word_lower = word.lower().strip()
             if not word_lower:
                 continue
                 
-            result = index_collection.find_one({
-                '_id': word_lower,
-                'doc_frequency': {'$lt': 0.1}  # Filter out very common words
-            })
+            result = index_collection.find_one({'_id': word_lower})
             
             if not result:
                 logger.debug("No index entry found for word: %s", word_lower)
                 continue
             
-            logger.debug("Processing word '%s' with importance %.2f", 
-                        word_lower, result.get('importance_score', 1.0))
-            
-            # Calculate word importance
-            importance = result.get('importance_score', 1.0)
-            
-            # Get field-specific counts
-            field_counts = result.get('field_counts', {})
-            
-            # Calculate weighted score for this word
-            word_score = importance * sum(
-                count * self.text_processor.get_field_weight(field)
-                for field, count in field_counts.items()
-            )
-            
-            word_scores[word_lower] = word_score
-            
-            # Update card scores
-            for card_id in result.get('documents', []):
-                if card_id not in card_scores:
-                    card_scores[card_id] = 0
-                card_scores[card_id] += word_score
+            # Add all cards that contain this word
+            matching_cards.update(result.get('documents', []))
         
-        scoring_time = time.time() - scoring_start
-        logger.info("Word processing & scoring completed in %.3fs", scoring_time)
-        logger.info("Found scores for %d words and %d cards", len(word_scores), len(card_scores))
-        
-        # Sort cards by score
-        sort_start = time.time()
-        sorted_cards = sorted(
-            card_scores.items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )
-        sort_time = time.time() - sort_start
-        total_time = time.time() - start_time
-        
-        logger.info("Card sorting completed in %.3fs", sort_time)
-        logger.info("Total inverted search time: %.3fs", total_time)
-        logger.info("Found %d matching cards", len(sorted_cards))
-        
-        return [card_id for card_id, _ in sorted_cards]
+        logger.info("Found %d matching cards", len(matching_cards))
+        return list(matching_cards)
     
     def filter_cards(self, expanded_text: str, query_params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
