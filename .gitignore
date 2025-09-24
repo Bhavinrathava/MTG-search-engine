@@ -1,0 +1,5 @@
+/Src/BackEnd/Config
+/Src/BackEnd/Data
+/Src/BackEnd/Search/Data
+/Src/BackEnd/Search/Config
+.env
